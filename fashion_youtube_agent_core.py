@@ -1,7 +1,13 @@
 import os
 import requests
+from dotenv import load_dotenv, find_dotenv
 import google.generativeai as genai
 from google.generativeai import protos
+
+# Auto-load a .env file if present in this directory or any parent directory.
+# This allows local `.env` files (project root or subfolder) to provide
+# `GOOGLE_API_KEY` and `YOUTUBE_API_KEY` without exporting them manually.
+load_dotenv(find_dotenv())
 from typing import Dict, Any
 
 # ================== CONFIG ==================
