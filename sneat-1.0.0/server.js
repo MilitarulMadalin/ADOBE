@@ -25,6 +25,27 @@ const GEMINI_ENDPOINT_CANDIDATES = [
   { baseUrl: 'https://generativelanguage.googleapis.com/v1/models', model: 'gemini-2.5-flash' }
 ];
 
+const GEMINI_SYSTEM_INSTRUCTION = `You are STYLX Copilot, an AI stylist and analytics expert focused on fashion trends, influencer marketing, and performance metrics. Always ground answers in apparel, runway, street style, creator collaborations, and data insights. When discussing numbers, mention view counts, engagement rates, or growth percentages where possible. Keep the tone concise, trend-savvy, and actionable.`;
+
+const STYLX_ASSISTANT_NAME = 'STYLX Copilot';
+const GEMINI_FALLBACK_MESSAGE = `${STYLX_ASSISTANT_NAME} este momentan indisponibil. Verifică conexiunea sau cheia API și încearcă din nou.`;
+const GEMINI_FALLBACK_GREETING = `${STYLX_ASSISTANT_NAME} nu se poate conecta la serviciul AI în acest moment. Reîncearcă mai târziu.`;
+
+const buildSTYLXReplyPrompt = message =>
+  [
+    'Răspunde concis, în limba română, ca un consultant sofisticat în modă, influenceri și statistici.',
+    'Integrează idei despre trenduri, outfit-uri, colaborări cu creatori sau metrici relevante (vizualizări, engagement).',
+    'Evita exprimările generice și oferă recomandări orientate spre acțiune.',
+    `Mesaj utilizator: "${message}"`
+  ].join('\n');
+
+const STYLX_GREETING_PROMPT = [
+  'Compune un mesaj de salut scurt în limba română.',
+  `Prezintă-te drept ${STYLX_ASSISTANT_NAME}, consultant virtual în modă și marketing de influenceri.`,
+  'Menționează că poți analiza trenduri, campanii cu creatori și statistici de performanță.',
+  'Ton: profesionist, cald, actual.'
+].join('\n');
+
 function ensureDataDirectory() {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -220,6 +241,12 @@ async function generateGeminiResponse(prompt, fallbackMessage) {
     const endpoint = `${baseUrl}/${model}:generateContent?key=${encodeURIComponent(GOOGLE_API_KEY)}`;
 
     try {
+      const composedPrompt = [
+        GEMINI_SYSTEM_INSTRUCTION,
+        '---',
+        prompt
+      ].join('\n\n');
+
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -229,15 +256,21 @@ async function generateGeminiResponse(prompt, fallbackMessage) {
           contents: [
             {
               role: 'user',
-              parts: [{ text: prompt }]
+              parts: [{ text: composedPrompt }]
             }
           ]
         })
       });
 
       if (!response.ok) {
+        let errorText = '';
+        try {
+          errorText = await response.text();
+        } catch (readError) {
+          errorText = `failed to read error body: ${readError}`;
+        }
         // eslint-disable-next-line no-console
-        console.error('Gemini API error:', response.status, response.statusText, 'for', model);
+        console.error('Gemini API error:', response.status, response.statusText, 'for', model, errorText);
         if (response.status === 404) {
           continue;
         }
@@ -521,10 +554,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.get('/api/chat', async (_req, res) => {
-  const fallback = 'Salut! Sunt FashionAI, cu ce te pot ajuta astăzi?';
-  const prompt =
-    'Oferă o urare scurtă, prietenoasă și profesionistă în limba română din perspectiva FashionAI, consultant virtual în trenduri vestimentare.';
-  const message = await generateGeminiResponse(prompt, fallback);
+  const message = await generateGeminiResponse(STYLX_GREETING_PROMPT, GEMINI_FALLBACK_GREETING);
   res.json({ message });
 });
 
@@ -537,9 +567,8 @@ app.post('/api/chat', async (req, res) => {
   }
 
   const safeMessage = trimmedMessage.replace(/"/g, '\\"');
-  const prompt = `Răspunde prietenos, concis și profesionist în limba română ca FashionAI, expert în modă, la mesajul utilizatorului: "${safeMessage}"`;
-  const fallback = 'Îți mulțumesc pentru mesaj! Momentan nu pot contacta serviciul Gemini.';
-  const reply = await generateGeminiResponse(prompt, fallback);
+  const prompt = buildSTYLXReplyPrompt(safeMessage);
+  const reply = await generateGeminiResponse(prompt, GEMINI_FALLBACK_MESSAGE);
   res.json({ message: reply });
 });
 

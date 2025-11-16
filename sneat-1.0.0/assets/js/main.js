@@ -574,7 +574,12 @@ let menu, animate;
     const bubble = document.createElement('div');
     const resolvedVariant = allowedVariants.has(variant) ? variant : 'server';
     bubble.className = `chat-message chat-message--${resolvedVariant}`;
-    bubble.textContent = text;
+    if (resolvedVariant === 'client') {
+      bubble.textContent = text;
+    } else {
+      const rendered = renderMarkdownToHtml(text);
+      bubble.innerHTML = rendered || `<p>${escapeHtml(text)}</p>`;
+    }
     chatWindowEl.appendChild(bubble);
     chatWindowEl.scrollTop = chatWindowEl.scrollHeight;
   };
