@@ -6,15 +6,24 @@ const cookieParser = require('cookie-parser');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const Database = require('better-sqlite3');
+const dotenv = require('dotenv');
 
 const APP_ROOT = __dirname;
 const DATA_DIR = path.join(APP_ROOT, 'data');
 const DB_PATH = path.join(DATA_DIR, 'app.db');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
+const STATS_FILE_PATH = path.join(APP_ROOT, '..', 'Stats.md');
+
+dotenv.config({ path: path.join(APP_ROOT, '..', '.env') });
+
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || '';
 const SESSION_COOKIE = 'session_token';
 const DEFAULT_SESSION_TTL_MINUTES = 60 * 24 * 7; // 7 days
 const REMEMBER_ME_SESSION_TTL_MINUTES = 60 * 24 * 30; // 30 days
 const MAX_AVATAR_SIZE_BYTES = 800 * 1024;
+const GEMINI_ENDPOINT_CANDIDATES = [
+  { baseUrl: 'https://generativelanguage.googleapis.com/v1/models', model: 'gemini-2.5-flash' }
+];
 
 function ensureDataDirectory() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -194,6 +203,59 @@ function saveAvatarData(userId, dataUrl) {
   }
 
   return filename;
+}
+
+async function generateGeminiResponse(prompt, fallbackMessage) {
+  if (!GOOGLE_API_KEY) {
+    return fallbackMessage;
+  }
+
+  if (typeof fetch !== 'function') {
+    // eslint-disable-next-line no-console
+    console.error('Fetch API is not available in this Node.js version.');
+    return fallbackMessage;
+  }
+
+  for (const { baseUrl, model } of GEMINI_ENDPOINT_CANDIDATES) {
+    const endpoint = `${baseUrl}/${model}:generateContent?key=${encodeURIComponent(GOOGLE_API_KEY)}`;
+
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: prompt }]
+            }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        // eslint-disable-next-line no-console
+        console.error('Gemini API error:', response.status, response.statusText, 'for', model);
+        if (response.status === 404) {
+          continue;
+        }
+        return fallbackMessage;
+      }
+
+      const payload = await response.json();
+      const parts =
+        payload?.candidates?.[0]?.content?.parts?.map(part => part.text).filter(Boolean) ?? [];
+      const text = parts.join('\n').trim();
+      return text || fallbackMessage;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Gemini request failed for', model, error);
+    }
+  }
+
+  return fallbackMessage;
 }
 
 function createSession(userId, rememberMe) {
@@ -458,11 +520,15 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: nowISO() });
 });
 
-app.get('/api/chat', (_req, res) => {
-  res.json({ message: 'Salut! Sunt serverul TrendAI. Cu ce te pot ajuta astăzi?' });
+app.get('/api/chat', async (_req, res) => {
+  const fallback = 'Salut! Sunt FashionAI, cu ce te pot ajuta astăzi?';
+  const prompt =
+    'Oferă o urare scurtă, prietenoasă și profesionistă în limba română din perspectiva FashionAI, consultant virtual în trenduri vestimentare.';
+  const message = await generateGeminiResponse(prompt, fallback);
+  res.json({ message });
 });
 
-app.post('/api/chat', (req, res) => {
+app.post('/api/chat', async (req, res) => {
   const { message } = req.body || {};
   const trimmedMessage = typeof message === 'string' ? message.trim() : '';
   if (!trimmedMessage) {
@@ -470,7 +536,21 @@ app.post('/api/chat', (req, res) => {
     return;
   }
 
-  res.json({ message: `Serverul a primit mesajul: ${trimmedMessage}` });
+  const safeMessage = trimmedMessage.replace(/"/g, '\\"');
+  const prompt = `Răspunde prietenos, concis și profesionist în limba română ca FashionAI, expert în modă, la mesajul utilizatorului: "${safeMessage}"`;
+  const fallback = 'Îți mulțumesc pentru mesaj! Momentan nu pot contacta serviciul Gemini.';
+  const reply = await generateGeminiResponse(prompt, fallback);
+  res.json({ message: reply });
+});
+
+app.get('/api/stats', (_req, res) => {
+  fs.readFile(STATS_FILE_PATH, 'utf8', (error, data) => {
+    if (error) {
+      res.status(500).json({ error: 'Nu am putut încărca statisticile.' });
+      return;
+    }
+    res.type('text/plain').send(data);
+  });
 });
 
 // Static content

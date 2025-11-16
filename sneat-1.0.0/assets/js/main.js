@@ -36,6 +36,213 @@ let menu, animate;
     return fetch(`${API_BASE}${path}`, requestOptions);
   };
 
+  const escapeHtml = value => {
+    if (value == null) return '';
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
+  const applyInlineMarkdown = text => {
+    let output = escapeHtml(text);
+    output = output.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    output = output.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    return output;
+  };
+
+  const renderMarkdownToHtml = markdown => {
+    if (!markdown) {
+      return '';
+    }
+
+    const lines = String(markdown).split(/\r?\n/);
+    const htmlChunks = [];
+    let paragraphBuffer = [];
+    let listBuffer = null;
+    let tableBuffer = null;
+
+    const flushParagraph = () => {
+      if (!paragraphBuffer.length) return;
+      const paragraphText = paragraphBuffer.join(' ');
+      htmlChunks.push(`<p>${applyInlineMarkdown(paragraphText)}</p>`);
+      paragraphBuffer = [];
+    };
+
+    const flushList = () => {
+      if (!listBuffer) return;
+      if (listBuffer.type === 'ol') {
+        const startAttr = listBuffer.start > 1 ? ` start="${listBuffer.start}"` : '';
+        htmlChunks.push(`<ol${startAttr}>`);
+        listBuffer.items.forEach(item => {
+          htmlChunks.push(`<li>${item}</li>`);
+        });
+        htmlChunks.push('</ol>');
+      } else {
+        htmlChunks.push('<ul>');
+        listBuffer.items.forEach(item => {
+          htmlChunks.push(`<li>${item}</li>`);
+        });
+        htmlChunks.push('</ul>');
+      }
+      listBuffer = null;
+    };
+
+    const isTableSeparatorRow = cells =>
+      cells.every(cell => /^:?-{3,}:?$/u.test(cell.replace(/\s+/g, '')));
+
+    const parseAlignment = token => {
+      const trimmed = token.trim();
+      const startsWithColon = trimmed.startsWith(':');
+      const endsWithColon = trimmed.endsWith(':');
+      if (startsWithColon && endsWithColon) return 'center';
+      if (endsWithColon) return 'right';
+      if (startsWithColon) return 'left';
+      return '';
+    };
+
+    const parseTableCells = line =>
+      line
+        .trim()
+        .replace(/^\|/, '')
+        .replace(/\|$/, '')
+        .split('|')
+        .map(cell => cell.trim());
+
+    const normaliseRowLength = row => {
+      if (!tableBuffer || !tableBuffer.header) return row;
+      const targetLength = tableBuffer.header.length;
+      if (row.length === targetLength) return row;
+      if (row.length < targetLength) {
+        return row.concat(Array.from({ length: targetLength - row.length }, () => ''));
+      }
+      return row.slice(0, targetLength);
+    };
+
+    const flushTable = () => {
+      if (!tableBuffer) return;
+      const { header, align, rows } = tableBuffer;
+      const alignments = (align || []).slice(0, header.length);
+      while (alignments.length < header.length) {
+        alignments.push('');
+      }
+
+      htmlChunks.push('<div class="markdown-table-wrapper"><table class="markdown-table">');
+      if (header.length) {
+        htmlChunks.push('<thead><tr>');
+        header.forEach((cell, index) => {
+          const alignAttr = alignments[index] ? ` style="text-align:${alignments[index]}"` : '';
+          htmlChunks.push(`<th${alignAttr}>${applyInlineMarkdown(cell)}</th>`);
+        });
+        htmlChunks.push('</tr></thead>');
+      }
+
+      if (rows.length) {
+        htmlChunks.push('<tbody>');
+        rows.forEach(row => {
+          htmlChunks.push('<tr>');
+          row.forEach((cell, index) => {
+            const alignAttr = alignments[index] ? ` style="text-align:${alignments[index]}"` : '';
+            htmlChunks.push(`<td${alignAttr}>${applyInlineMarkdown(cell)}</td>`);
+          });
+          htmlChunks.push('</tr>');
+        });
+        htmlChunks.push('</tbody>');
+      }
+
+      htmlChunks.push('</table></div>');
+      tableBuffer = null;
+    };
+
+    lines.forEach(line => {
+      const trimmed = line.trim();
+
+      if (!trimmed) {
+        flushParagraph();
+        flushList();
+        flushTable();
+        return;
+      }
+
+      const isTableRow = /^\|.*\|$/u.test(trimmed);
+      if (isTableRow) {
+        const cells = parseTableCells(trimmed);
+        if (!tableBuffer) {
+          flushParagraph();
+          flushList();
+          tableBuffer = { header: cells, align: null, rows: [], awaitingSeparator: true };
+          return;
+        }
+
+        if (tableBuffer.awaitingSeparator && isTableSeparatorRow(cells)) {
+          tableBuffer.align = cells.map(parseAlignment);
+          tableBuffer.awaitingSeparator = false;
+          return;
+        }
+
+        if (tableBuffer.awaitingSeparator) {
+          tableBuffer.rows.push(normaliseRowLength(cells));
+          tableBuffer.awaitingSeparator = false;
+          return;
+        }
+
+        tableBuffer.rows.push(normaliseRowLength(cells));
+        return;
+      }
+
+      if (tableBuffer) {
+        flushTable();
+      }
+
+      const headingMatch = trimmed.match(/^(#{1,3})\s+(.*)$/);
+      if (headingMatch) {
+        flushParagraph();
+        flushList();
+        flushTable();
+        const level = Math.min(headingMatch[1].length, 3);
+        htmlChunks.push(`<h${level}>${applyInlineMarkdown(headingMatch[2])}</h${level}>`);
+        return;
+      }
+
+      const orderedMatch = trimmed.match(/^(\d+)\.\s+(.*)$/);
+      if (orderedMatch) {
+        flushParagraph();
+        const itemHtml = applyInlineMarkdown(orderedMatch[2]);
+        const startValue = Number(orderedMatch[1]);
+        if (!listBuffer || listBuffer.type !== 'ol') {
+          flushList();
+          listBuffer = { type: 'ol', start: startValue, items: [] };
+        } else if (!listBuffer.items.length) {
+          listBuffer.start = startValue;
+        }
+        listBuffer.items.push(itemHtml);
+        return;
+      }
+
+      const unorderedMatch = trimmed.match(/^[-*]\s+(.*)$/);
+      if (unorderedMatch) {
+        flushParagraph();
+        const itemHtml = applyInlineMarkdown(unorderedMatch[1]);
+        if (!listBuffer || listBuffer.type !== 'ul') {
+          flushList();
+          listBuffer = { type: 'ul', start: 1, items: [] };
+        }
+        listBuffer.items.push(itemHtml);
+        return;
+      }
+
+      paragraphBuffer.push(trimmed);
+    });
+
+    flushParagraph();
+    flushList();
+    flushTable();
+
+    return htmlChunks.join('');
+  };
+
   const allowedTopLevelItems = new Set(['Dashboard', 'Chats', 'Account Settings', 'Authentications']);
   const allowedHeaders = new Set(['Pages']);
 
@@ -75,7 +282,7 @@ let menu, animate;
 
   const brandTextEls = document.querySelectorAll('.app-brand-text');
   brandTextEls.forEach(el => {
-    el.textContent = 'FashionAI';
+    el.textContent = 'STYLX';
   });
 
   const brandLogoEls = document.querySelectorAll('.app-brand-logo');
@@ -83,7 +290,7 @@ let menu, animate;
     el.innerHTML = '';
     const logoImg = document.createElement('img');
     logoImg.src = projectLogoHref;
-    logoImg.alt = 'FashionAI logo';
+    logoImg.alt = 'STYLX logo';
     logoImg.className = 'app-brand-logo-img';
     logoImg.style.maxWidth = '100%';
     logoImg.style.height = 'auto';
@@ -336,6 +543,31 @@ let menu, animate;
   const chatFormEl = document.querySelector('[data-role="chat-form"]');
   const chatInputEl = document.querySelector('[data-role="chat-input"]');
 
+  const statsContainer = document.querySelector('[data-role="stats-content"]');
+
+  if (statsContainer) {
+    const showStatsMessage = message => {
+      statsContainer.innerHTML = `<p>${escapeHtml(message)}</p>`;
+    };
+
+    const loadStats = async () => {
+      try {
+        const response = await apiFetch('/stats');
+        if (!response.ok) {
+          throw new Error('response_error');
+        }
+        const markdown = await response.text();
+        const rendered = renderMarkdownToHtml(markdown) || '<p>Datele nu sunt disponibile.</p>';
+        statsContainer.innerHTML = rendered;
+      } catch (error) {
+        showStatsMessage('Nu am putut încărca statisticile. Încearcă din nou mai târziu.');
+      }
+    };
+
+    showStatsMessage('Se încarcă statisticile...');
+    loadStats();
+  }
+
   const appendChatMessage = (text, variant = 'server') => {
     if (!chatWindowEl || !text) return;
     const allowedVariants = new Set(['client', 'server', 'system']);
@@ -380,14 +612,6 @@ let menu, animate;
 
     if (!initialLoaded) {
       appendChatMessage('Nu am putut obține mesajul inițial de la server.', 'system');
-    }
-
-    const testMessage = 'Mesaj de test din client.';
-    appendChatMessage(testMessage, 'client');
-    try {
-      await postChatMessageToServer(testMessage);
-    } catch (error) {
-      appendChatMessage('Serverul nu a confirmat mesajul de test.', 'system');
     }
   };
 
