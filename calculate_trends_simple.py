@@ -53,15 +53,16 @@ def extract_keywords_from_video(video: Dict) -> List[str]:
     
     # Fashion keywords comune
     fashion_terms = [
-        "fashion haul", "outfit ideas", "style guide", "lookbook", 
-        "fashion trends", "streetwear", "minimalist fashion", "aesthetic",
-        "wardrobe essentials", "capsule wardrobe", "outfit inspiration",
-        "fashion week", "runway", "designer", "vintage fashion",
+        "vintage fashion",
         "thrift haul", "sustainable fashion", "fast fashion",
         "y2k fashion", "grunge", "cottagecore", "dark academia",
         "clean girl", "mob wife", "quiet luxury", "old money",
+        "nefor", "mermaidcore", "coastal cowgirl", "blokette",
+        "eclectic grandpa", "balletcore", "gorpcore", "athleisure",
+        "normcore", "tomato girl", "retro futurism",
         "oversized", "blazer", "wide leg", "cargo pants",
-        "leather jacket", "trench coat", "denim", "maxi dress"
+        "leather jacket", "trench coat", "denim", "maxi dress",
+        "apres ski", "boho chic", "mod revival"
     ]
     
     for term in fashion_terms:

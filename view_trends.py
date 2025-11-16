@@ -3,17 +3,56 @@
 Vizualizează trendurile emergente detectate din baza de date.
 
 Usage:
-  python view_trends.py --db youtube_videos.db
-  python view_trends.py --db youtube_videos.db --top 10
-  python view_trends.py --db youtube_videos.db --json
+    python view_trends.py --db youtube_videos.db
+    python view_trends.py --db youtube_videos.db --top 10
+    python view_trends.py --db youtube_videos.db --json
+
+Implicit, rezultatele sunt afișate în format Markdown ușor de citit.
 """
 import sqlite3
 import argparse
 import json
 from typing import List, Dict
 
+def _format_trends_as_markdown(trends: List[Dict], top: int) -> str:
+    """Generează un tabel Markdown cu trendurile detectate."""
+    header = "| Trend | Score | Avg Views/Clip |"
+    separator = "| --- | ---: | ---: |"
 
-def view_trends(db_path: str, top: int = 20, output_format: str = "table"):
+    lines: List[str] = [
+        f"## 🔥 Top {len(trends)} Emerging Fashion Trends (Top {top})\n",
+        header,
+        separator,
+    ]
+
+    for trend in trends:
+        lines.append(
+            "| {name} | {score:.2f} | {avg_views:,.0f} |".format(
+                name=f"**{trend['name'].title()}**",
+                score=trend["score"],
+                avg_views=trend["avg_views"],
+            )
+        )
+
+    return "\n".join(lines) + "\n"
+
+def _format_trend_details_as_markdown(trend: Dict) -> str:
+    """Generează detaliile unui trend în format Markdown."""
+    lines = [
+        f"## 🔍 Trend Details: **{trend['name'].title()}**\n",
+        f"- **Score:** {trend['score']:.2f}",
+        f"- **Videos:** {trend['num_videos']}",
+        f"- **Total views:** {trend['total_views']:,}",
+        f"- **Average views/video:** {trend['avg_views']:,.0f}",
+        f"- **First seen:** {trend['first_seen_at'][:10]}",
+        f"- **Last seen:** {trend['last_seen_at'][:10]}",
+        f"- **Detected at:** {trend['detected_at'][:19]}",
+        "",
+    ]
+
+    return "\n".join(lines)
+
+def view_trends(db_path: str, top: int = 20, output_format: str = "markdown"):
     """Afișează trendurile emergente din baza de date."""
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -50,27 +89,9 @@ def view_trends(db_path: str, top: int = 20, output_format: str = "table"):
     if output_format == "json":
         print(json.dumps(trends, indent=2, ensure_ascii=False))
         return
-    
-    # Format tabel
-    print(f"\n{'='*100}")
-    print(f"🔥 TOP {len(trends)} EMERGING FASHION TRENDS")
-    print(f"{'='*100}\n")
-    
-    for i, trend in enumerate(trends, 1):
-        print(f"{i}. {trend['name'].upper()}")
-        print(f"   ├─ Score: {trend['score']:.2f}")
-        print(f"   ├─ Videos: {trend['num_videos']} | Total Views: {trend['total_views']:,} | Avg Views: {trend['avg_views']:,.0f}")
-        print(f"   ├─ First seen: {trend['first_seen_at'][:10]} | Last seen: {trend['last_seen_at'][:10]}")
-        print(f"   └─ Detected at: {trend['detected_at'][:19]}")
-        print()
-    
-    print(f"{'='*100}\n")
-    
-    # Statistici
-    total_videos = sum(t["num_videos"] for t in trends)
-    total_views = sum(t["total_views"] for t in trends)
-    print(f"📊 Stats: {len(trends)} trends | {total_videos} total videos | {total_views:,} total views")
 
+    markdown_output = _format_trends_as_markdown(trends, top)
+    print(markdown_output)
 
 def view_trend_details(db_path: str, trend_name: str):
     """Afișează detalii despre un trend specific (videouri care îl menționează)."""
@@ -89,17 +110,9 @@ def view_trend_details(db_path: str, trend_name: str):
     
     trend = dict(trend)
     
-    print(f"\n{'='*100}")
-    print(f"🔍 TREND DETAILS: {trend['name'].upper()}")
-    print(f"{'='*100}\n")
-    print(f"Score: {trend['score']:.2f}")
-    print(f"Videos: {trend['num_videos']} | Total Views: {trend['total_views']:,} | Avg Views: {trend['avg_views']:,.0f}")
-    print(f"First seen: {trend['first_seen_at'][:10]} | Last seen: {trend['last_seen_at'][:10]}")
-    print(f"Detected at: {trend['detected_at'][:19]}")
-    print(f"\n{'='*100}\n")
-    
-    conn.close()
+    print(_format_trend_details_as_markdown(trend))
 
+    conn.close()
 
 def parse_args():
     p = argparse.ArgumentParser(description="View emerging fashion trends from database")
@@ -109,16 +122,14 @@ def parse_args():
     p.add_argument("--trend", help="Show details for specific trend name")
     return p.parse_args()
 
-
 def main():
     args = parse_args()
     
     if args.trend:
         view_trend_details(args.db, args.trend)
     else:
-        output_format = "json" if args.json else "table"
+        output_format = "json" if args.json else "markdown"
         view_trends(args.db, args.top, output_format)
-
 
 if __name__ == "__main__":
     main()

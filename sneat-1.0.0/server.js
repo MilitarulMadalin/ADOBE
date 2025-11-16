@@ -13,6 +13,7 @@ const DATA_DIR = path.join(APP_ROOT, 'data');
 const DB_PATH = path.join(DATA_DIR, 'app.db');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const STATS_FILE_PATH = path.join(APP_ROOT, '..', 'Stats.md');
+const NEWSLETTER_FILE_PATH = path.join(APP_ROOT, '..', 'Newsletter.md');
 
 dotenv.config({ path: path.join(APP_ROOT, '..', '.env') });
 
@@ -25,26 +26,39 @@ const GEMINI_ENDPOINT_CANDIDATES = [
   { baseUrl: 'https://generativelanguage.googleapis.com/v1/models', model: 'gemini-2.5-flash' }
 ];
 
-const GEMINI_SYSTEM_INSTRUCTION = `You are STYLX Copilot, an AI stylist and analytics expert focused on fashion trends, influencer marketing, and performance metrics. Always ground answers in apparel, runway, street style, creator collaborations, and data insights. When discussing numbers, mention view counts, engagement rates, or growth percentages where possible. Keep the tone concise, trend-savvy, and actionable.`;
+const GEMINI_SYSTEM_INSTRUCTION = `You are STYLX, an AI stylist and fashion analyst focused on runway reports, street style movements, outfit curation, and wardrobe trends. Always ground answers in garments, silhouettes, fabrics, color stories, and cultural fashion moments. When discussing numbers, only reference audience interest if it enhances the style insight. Keep the tone concise, trend-savvy, and actionable for fashion guidance.`;
 
-const STYLX_ASSISTANT_NAME = 'STYLX Copilot';
+const STYLX_ASSISTANT_NAME = 'STYLX';
 const GEMINI_FALLBACK_MESSAGE = `${STYLX_ASSISTANT_NAME} este momentan indisponibil. Verifică conexiunea sau cheia API și încearcă din nou.`;
 const GEMINI_FALLBACK_GREETING = `${STYLX_ASSISTANT_NAME} nu se poate conecta la serviciul AI în acest moment. Reîncearcă mai târziu.`;
+const GEMINI_NEWSLETTER_FALLBACK = 'Newsletter-ul STYLX Fashion Pulse nu este disponibil momentan.';
 
 const buildSTYLXReplyPrompt = message =>
   [
-    'Răspunde concis, în limba română, ca un consultant sofisticat în modă, influenceri și statistici.',
-    'Integrează idei despre trenduri, outfit-uri, colaborări cu creatori sau metrici relevante (vizualizări, engagement).',
-    'Evita exprimările generice și oferă recomandări orientate spre acțiune.',
+    'Răspunde concis, în limba română, ca un consultant sofisticat în modă și styling.',
+    'Integrează idei despre trenduri, outfit-uri, palete cromatice, materiale și referințe din cultura modei.',
+    'Evita exprimările generice și oferă recomandări clare de styling sau inspirație vestimentară.',
     `Mesaj utilizator: "${message}"`
   ].join('\n');
 
 const STYLX_GREETING_PROMPT = [
   'Compune un mesaj de salut scurt în limba română.',
-  `Prezintă-te drept ${STYLX_ASSISTANT_NAME}, consultant virtual în modă și marketing de influenceri.`,
-  'Menționează că poți analiza trenduri, campanii cu creatori și statistici de performanță.',
+  `Prezintă-te drept ${STYLX_ASSISTANT_NAME}, consultant virtual în modă și styling personal.`,
+  'Menționează că poți analiza trenduri, siluete, combinații de culori și inspirație pentru outfit-uri.',
   'Ton: profesionist, cald, actual.'
 ].join('\n');
+
+const buildNewsletterPrompt = statsMarkdown =>
+  [
+    'Ai următoarele date despre cele mai recente trenduri din industria modei:',
+    statsMarkdown,
+    'Pe baza lor, redactează în limba română un newsletter premium intitulat "STYLX Fashion Pulse".',
+    'Structură recomandată: intro scurt (2-3 propoziții), listă cu 3-4 insight-uri cheie despre stil și o secțiune finală cu recomandări de styling sau idei de outfit.',
+    'Include cifre exacte din tabel când argumentezi insight-urile și păstrează ton editorial sofisticat, centrat pe modă.',
+    'Nu inventa date noi și nu repeta tabelul integral; rezumă insight-urile și evidențiază direcții pentru garderobă și expresie vestimentară.',
+    'Nu menționa în text de unde provin datele sau numele fișierelor folosite.',
+    'Nu mentiona cuvantul copilot in denumire.'
+  ].join('\n\n');
 
 function ensureDataDirectory() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -580,6 +594,31 @@ app.get('/api/stats', (_req, res) => {
     }
     res.type('text/plain').send(data);
   });
+});
+
+app.get('/api/newsletter', async (_req, res) => {
+  try {
+    const fileContent = await fs.promises.readFile(NEWSLETTER_FILE_PATH, 'utf8');
+    const trimmedContent = fileContent.trim();
+    if (trimmedContent) {
+      res.json({ message: trimmedContent });
+      return;
+    }
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn('Newsletter file unavailable, attempting AI generation.', error);
+  }
+
+  try {
+    const statsMarkdown = await fs.promises.readFile(STATS_FILE_PATH, 'utf8');
+    const prompt = buildNewsletterPrompt(statsMarkdown);
+    const message = await generateGeminiResponse(prompt, GEMINI_NEWSLETTER_FALLBACK);
+    res.json({ message });
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Newsletter generation failed:', error);
+    res.json({ message: GEMINI_NEWSLETTER_FALLBACK });
+  }
 });
 
 // Static content

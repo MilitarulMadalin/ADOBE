@@ -542,8 +542,10 @@ let menu, animate;
   const chatWindowEl = document.querySelector('[data-role="chat-window"]');
   const chatFormEl = document.querySelector('[data-role="chat-form"]');
   const chatInputEl = document.querySelector('[data-role="chat-input"]');
+  let typingIndicatorEl = null;
 
   const statsContainer = document.querySelector('[data-role="stats-content"]');
+  const newsletterContainer = document.querySelector('[data-role="newsletter-content"]');
 
   if (statsContainer) {
     const showStatsMessage = message => {
@@ -568,6 +570,30 @@ let menu, animate;
     loadStats();
   }
 
+  if (newsletterContainer) {
+    const showNewsletterMessage = message => {
+      newsletterContainer.innerHTML = `<p>${escapeHtml(message)}</p>`;
+    };
+
+    const loadNewsletter = async () => {
+      try {
+        const response = await apiFetch('/newsletter');
+        if (!response.ok) {
+          throw new Error('response_error');
+        }
+        const payload = await response.json();
+        const markdown = payload?.message || '';
+        const rendered = renderMarkdownToHtml(markdown) || '<p>Newsletter-ul nu este disponibil.</p>';
+        newsletterContainer.innerHTML = rendered;
+      } catch (error) {
+        showNewsletterMessage('Nu am putut genera newsletter-ul. Încearcă din nou mai târziu.');
+      }
+    };
+
+    showNewsletterMessage('Se generează newsletter-ul STYLX...');
+    loadNewsletter();
+  }
+
   const appendChatMessage = (text, variant = 'server') => {
     if (!chatWindowEl || !text) return;
     const allowedVariants = new Set(['client', 'server', 'system']);
@@ -584,18 +610,48 @@ let menu, animate;
     chatWindowEl.scrollTop = chatWindowEl.scrollHeight;
   };
 
-  const postChatMessageToServer = async message => {
-    const response = await apiFetch('/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message })
-    });
-    if (!response.ok) {
-      throw new Error('failed');
+  const showTypingIndicator = () => {
+    if (!chatWindowEl || typingIndicatorEl) return;
+    const indicator = document.createElement('div');
+    indicator.className = 'chat-message chat-message--server chat-message--typing';
+    indicator.setAttribute('role', 'status');
+    indicator.setAttribute('aria-live', 'polite');
+    indicator.innerHTML = [
+      '<span class="typing-dot"></span>',
+      '<span class="typing-dot"></span>',
+      '<span class="typing-dot"></span>'
+    ].join('');
+    chatWindowEl.appendChild(indicator);
+    chatWindowEl.scrollTop = chatWindowEl.scrollHeight;
+    typingIndicatorEl = indicator;
+  };
+
+  const removeTypingIndicator = () => {
+    if (typingIndicatorEl && typingIndicatorEl.parentNode) {
+      typingIndicatorEl.parentNode.removeChild(typingIndicatorEl);
     }
-    const data = await response.json();
-    if (data && data.message) {
-      appendChatMessage(data.message, 'server');
+    typingIndicatorEl = null;
+  };
+
+  const postChatMessageToServer = async message => {
+    showTypingIndicator();
+    try {
+      const response = await apiFetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message })
+      });
+      if (!response.ok) {
+        throw new Error('failed');
+      }
+      const data = await response.json();
+      removeTypingIndicator();
+      if (data && data.message) {
+        appendChatMessage(data.message, 'server');
+      }
+    } catch (error) {
+      removeTypingIndicator();
+      throw error;
     }
   };
 
@@ -603,16 +659,20 @@ let menu, animate;
     if (!chatWindowEl) return;
     let initialLoaded = false;
     try {
+      showTypingIndicator();
       const response = await apiFetch('/chat');
       if (response.ok) {
         const payload = await response.json();
         if (payload && payload.message) {
+          removeTypingIndicator();
           appendChatMessage(payload.message, 'server');
           initialLoaded = true;
         }
       }
     } catch (error) {
       // ignore; system message below will inform the user
+    } finally {
+      removeTypingIndicator();
     }
 
     if (!initialLoaded) {
