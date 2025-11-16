@@ -159,3 +159,69 @@
 .content-footer.footer {
   display: none !important;
 }
+
+.dropdown-menu .profile-menu-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-right: 0.5rem;
+}
+
+.menu-icon-with-image {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.menu-icon-with-image::before {
+  display: none !important;
+}
+
+.menu-custom-icon-top {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.chat-card .chat-window {
+  background-color: #f5f6fa;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  min-height: 240px;
+  max-height: 360px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.chat-card .chat-message {
+  max-width: 85%;
+  padding: 0.65rem 0.9rem;
+  border-radius: 0.9rem;
+  background-color: #e4e6eb;
+  color: #283144;
+  align-self: flex-start;
+  box-shadow: 0 2px 6px rgba(15, 20, 34, 0.08);
+  word-wrap: break-word;
+}
+
+.chat-card .chat-message--client {
+  background-color: #696cff;
+  color: #ffffff;
+  align-self: flex-end;
+}
+
+.chat-card .chat-message--system {
+  background-color: #ffe8a1;
+  color: #6b5600;
+  align-self: center;
+}
+
+.chat-card .chat-form .form-control {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.chat-card .chat-form .btn {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}

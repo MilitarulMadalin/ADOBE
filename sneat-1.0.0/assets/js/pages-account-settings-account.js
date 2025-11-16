@@ -4,26 +4,32 @@
 
 'use strict';
 
-document.addEventListener('DOMContentLoaded', function (e) {
-  (function () {
-    const deactivateAcc = document.querySelector('#formAccountDeactivation');
+document.addEventListener('DOMContentLoaded', function () {
+  const accountUserImage = document.getElementById('uploadedAvatar');
+  const fileInput = document.querySelector('.account-file-input');
+  const resetFileButton = document.querySelector('.account-image-reset');
 
-    // Update/reset user image of account page
-    let accountUserImage = document.getElementById('uploadedAvatar');
-    const fileInput = document.querySelector('.account-file-input'),
-      resetFileInput = document.querySelector('.account-image-reset');
+  if (accountUserImage && !accountUserImage.dataset.defaultSrc) {
+    accountUserImage.dataset.defaultSrc = accountUserImage.src;
+  }
 
-    if (accountUserImage) {
-      const resetImage = accountUserImage.src;
-      fileInput.onchange = () => {
-        if (fileInput.files[0]) {
-          accountUserImage.src = window.URL.createObjectURL(fileInput.files[0]);
-        }
-      };
-      resetFileInput.onclick = () => {
+  if (fileInput) {
+    fileInput.addEventListener('change', () => {
+      const [file] = fileInput.files || [];
+      if (!file) return;
+      const event = new CustomEvent('account-avatar-selected', {
+        detail: { file }
+      });
+      document.dispatchEvent(event);
+    });
+  }
+
+  if (resetFileButton) {
+    resetFileButton.addEventListener('click', () => {
+      if (fileInput) {
         fileInput.value = '';
-        accountUserImage.src = resetImage;
-      };
-    }
-  })();
+      }
+      document.dispatchEvent(new CustomEvent('account-avatar-reset'));
+    });
+  }
 });

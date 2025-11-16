@@ -36,7 +36,7 @@ let menu, animate;
     return fetch(`${API_BASE}${path}`, requestOptions);
   };
 
-  const allowedTopLevelItems = new Set(['Dashboard', 'Account Settings', 'Authentications']);
+  const allowedTopLevelItems = new Set(['Dashboard', 'Chats', 'Account Settings', 'Authentications']);
   const allowedHeaders = new Set(['Pages']);
 
   const pruneSidebarMenus = root => {
@@ -67,6 +67,7 @@ let menu, animate;
   const projectLogoFile = 'project logo.png';
   const projectLogoHref = fontsPath + encodeURIComponent(projectLogoFile);
   const menuIconMap = {
+    Chats: 'chats.png',
     Account: 'user-account-icon.png',
     Notifications: 'notification-icon.png',
     Connections: 'connections.png'
@@ -109,6 +110,25 @@ let menu, animate;
     });
 
     const accountTabs = document.querySelectorAll('.nav.nav-pills.flex-column.flex-md-row.mb-3, .nav.nav-pills.account-settings-tabs');
+      const topLevelLabels = document.querySelectorAll('.menu-inner > .menu-item > .menu-link > div[data-i18n]');
+      topLevelLabels.forEach(labelEl => {
+        const key = labelEl.getAttribute('data-i18n') || labelEl.textContent.trim();
+        if (key !== 'Chats') return;
+        const iconFile = menuIconMap[key];
+        if (!iconFile) return;
+        const iconContainer = labelEl.previousElementSibling;
+        if (!iconContainer || iconContainer.querySelector('.menu-custom-icon')) {
+          return;
+        }
+        iconContainer.classList.add('menu-icon-with-image');
+        iconContainer.innerHTML = '';
+        const icon = document.createElement('img');
+        icon.src = fontsPath + encodeURIComponent(iconFile);
+        icon.alt = `${key} icon`;
+        icon.className = 'menu-custom-icon menu-custom-icon-top';
+        iconContainer.appendChild(icon);
+      });
+
     accountTabs.forEach(tabList => {
       tabList.classList.add('account-settings-tabs');
       tabList.querySelectorAll('.nav-link').forEach(link => {
@@ -163,25 +183,56 @@ let menu, animate;
       '<li><div class="dropdown-divider"></div></li>',
       '<li>',
       '  <a class="dropdown-item" data-role="profile" href="pages-account-settings-account.html">',
-      '    <i class="bx bx-user me-2"></i>',
       '    <span class="align-middle">My Profile</span>',
       '  </a>',
       '</li>',
       '<li>',
       '  <a class="dropdown-item" data-role="settings" href="pages-account-settings-account.html#formAccountSettings">',
-      '    <i class="bx bx-cog me-2"></i>',
       '    <span class="align-middle">Settings</span>',
       '  </a>',
       '</li>',
       '<li><div class="dropdown-divider"></div></li>',
       '<li>',
       '  <button type="button" class="dropdown-item" data-action="logout">',
-      '    <i class="bx bx-log-out me-2"></i>',
       '    <span class="align-middle">Log Out</span>',
       '  </button>',
       '</li>'
     ].join('\n');
   }
+
+  const applyProfileMenuIcons = () => {
+    if (!profileDropdown) return;
+    const profileIconMap = {
+      profile: 'user-account-icon.png',
+      settings: 'settings.png'
+    };
+
+    profileDropdown.querySelectorAll('[data-role]').forEach(link => {
+      const role = link.getAttribute('data-role');
+      const iconFile = role && profileIconMap[role];
+      if (!iconFile || link.querySelector('.profile-menu-icon')) {
+        return;
+      }
+      const label = link.querySelector('.align-middle') || link;
+      const icon = document.createElement('img');
+      icon.src = fontsPath + encodeURIComponent(iconFile);
+      icon.alt = `${label.textContent.trim()} icon`;
+      icon.className = 'menu-custom-icon profile-menu-icon';
+      link.insertBefore(icon, label);
+    });
+
+    const logoutButton = profileDropdown.querySelector('[data-action="logout"]');
+    if (logoutButton && !logoutButton.querySelector('.profile-menu-icon')) {
+      const label = logoutButton.querySelector('.align-middle') || logoutButton;
+      const icon = document.createElement('img');
+      icon.src = fontsPath + encodeURIComponent('logout.png');
+      icon.alt = 'Log Out icon';
+      icon.className = 'menu-custom-icon profile-menu-icon';
+      logoutButton.insertBefore(icon, label);
+    }
+  };
+
+  applyProfileMenuIcons();
 
   const navUserContainer = document.querySelector('.dropdown-user');
   if (navUserContainer) {
@@ -190,7 +241,7 @@ let menu, animate;
   }
 
   const navList = document.querySelector('.navbar-nav.flex-row.align-items-center.ms-auto');
-  const defaultAvatar = assetsPath.endsWith('/') ? `${assetsPath}img/avatars/1.png` : `${assetsPath}/img/avatars/1.png`;
+  const defaultAvatar = '/fonts/unknown.png';
   const dashboardUserTargets = document.querySelectorAll('[data-role="dashboard-user"]');
 
   const setDashboardUserName = name => {
@@ -255,7 +306,8 @@ let menu, animate;
     if (nameEl) nameEl.textContent = displayName;
     if (emailEl) emailEl.textContent = user.email;
 
-    updateAvatar(defaultAvatar);
+    const resolvedAvatar = user.avatarUrl ? String(user.avatarUrl) : defaultAvatar;
+    updateAvatar(resolvedAvatar);
     navUserContainer.classList.add('is-authenticated');
     setDashboardUserName(displayName);
   };
@@ -279,6 +331,85 @@ let menu, animate;
   showGuest();
   setDashboardUserName(null);
   syncAuthState();
+
+  const chatWindowEl = document.querySelector('[data-role="chat-window"]');
+  const chatFormEl = document.querySelector('[data-role="chat-form"]');
+  const chatInputEl = document.querySelector('[data-role="chat-input"]');
+
+  const appendChatMessage = (text, variant = 'server') => {
+    if (!chatWindowEl || !text) return;
+    const allowedVariants = new Set(['client', 'server', 'system']);
+    const bubble = document.createElement('div');
+    const resolvedVariant = allowedVariants.has(variant) ? variant : 'server';
+    bubble.className = `chat-message chat-message--${resolvedVariant}`;
+    bubble.textContent = text;
+    chatWindowEl.appendChild(bubble);
+    chatWindowEl.scrollTop = chatWindowEl.scrollHeight;
+  };
+
+  const postChatMessageToServer = async message => {
+    const response = await apiFetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message })
+    });
+    if (!response.ok) {
+      throw new Error('failed');
+    }
+    const data = await response.json();
+    if (data && data.message) {
+      appendChatMessage(data.message, 'server');
+    }
+  };
+
+  const initializeChat = async () => {
+    if (!chatWindowEl) return;
+    let initialLoaded = false;
+    try {
+      const response = await apiFetch('/chat');
+      if (response.ok) {
+        const payload = await response.json();
+        if (payload && payload.message) {
+          appendChatMessage(payload.message, 'server');
+          initialLoaded = true;
+        }
+      }
+    } catch (error) {
+      // ignore; system message below will inform the user
+    }
+
+    if (!initialLoaded) {
+      appendChatMessage('Nu am putut obține mesajul inițial de la server.', 'system');
+    }
+
+    const testMessage = 'Mesaj de test din client.';
+    appendChatMessage(testMessage, 'client');
+    try {
+      await postChatMessageToServer(testMessage);
+    } catch (error) {
+      appendChatMessage('Serverul nu a confirmat mesajul de test.', 'system');
+    }
+  };
+
+  if (chatWindowEl) {
+    initializeChat();
+  }
+
+  if (chatFormEl && chatInputEl) {
+    chatFormEl.addEventListener('submit', async event => {
+      event.preventDefault();
+      const message = chatInputEl.value.trim();
+      if (!message) return;
+      appendChatMessage(message, 'client');
+      chatInputEl.value = '';
+      try {
+        await postChatMessageToServer(message);
+      } catch (error) {
+        appendChatMessage('A apărut o eroare la trimiterea mesajului.', 'system');
+      }
+      chatInputEl.focus();
+    });
+  }
 
   document.addEventListener('click', event => {
     const target = event.target;
