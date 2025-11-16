@@ -149,11 +149,22 @@ def calculate_trends_simple(
     trend_metrics = []
     
     for trend_name, occurrences in trend_groups.items():
-        num_videos = len(occurrences)
-        total_views = sum(occ["view_count"] for occ in occurrences)
+        # Filtrează DOAR clipurile din 2025 (ignore tot din 2024 și mai vechi)
+        recent_occurrences = []
+        for occ in occurrences:
+            pub_date = occ["publish_date"]
+            if pub_date and pub_date.startswith("2025"):
+                recent_occurrences.append(occ)
+        
+        # Dacă nu mai rămân clipuri din 2025, skip acest trend
+        if not recent_occurrences:
+            continue
+        
+        num_videos = len(recent_occurrences)
+        total_views = sum(occ["view_count"] for occ in recent_occurrences)
         avg_views = total_views / num_videos if num_videos > 0 else 0
         
-        dates = [occ["publish_date"] for occ in occurrences if occ["publish_date"]]
+        dates = [occ["publish_date"] for occ in recent_occurrences if occ["publish_date"]]
         if not dates:
             continue
         
@@ -163,8 +174,35 @@ def calculate_trends_simple(
         
         days_since = calculate_days_since(first_seen_at, now)
         
-        # Score = num_videos * log(1 + total_views) / zile
-        score = (num_videos * math.log(1 + total_views)) / days_since
+        # Score cu pondere pe lună (clipuri din noiembrie > octombrie > etc)
+        # 1. Weighted views: pondere bazată pe lună din 2025
+        weighted_views = 0
+        for occ in recent_occurrences:
+            pub_date = occ["publish_date"]
+            # Extrage luna din format ISO: "2025-11-15T..." -> luna = 11
+            try:
+                month = int(pub_date[5:7])  # extrage "11" din "2025-11-15"
+            except:
+                month = 1
+            
+            # Pondere: noiembrie (11) = 1.0, octombrie (10) = 0.9, septembrie = 0.8, etc.
+            # Formula: (month / 11) pentru ca noiembrie să fie 1.0
+            month_weight = (month / 11.0) if month <= 11 else 1.0
+            
+            # Decay suplimentar în funcție de zile în cadrul lunii
+            video_days_old = calculate_days_since(pub_date, now)
+            day_weight = math.exp(-video_days_old / 7)
+            
+            # Weight final = pondere lună × decay zile
+            weight = month_weight * day_weight
+            weighted_views += occ["view_count"] * weight
+        
+        # 2. Trend age penalty: MAXIM PENALTY pentru trenduri vechi
+        # Orice trend mai vechi de câteva zile e ELIMINAT virtual
+        trend_age_factor = math.exp(-days_since / 3.5)  # după 3.5 zile factor = 0.37
+        
+        # Score final = num_videos * log(1 + weighted_views) * trend_age_factor / zile
+        score = (num_videos * math.log(1 + weighted_views) * trend_age_factor) / max(days_since, 1)
         
         trend_metrics.append({
             "name": trend_name,
