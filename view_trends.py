@@ -20,7 +20,7 @@ def _format_trends_as_markdown(trends: List[Dict], top: int) -> str:
     separator = "| --- | ---: | ---: |"
 
     lines: List[str] = [
-        f"## 🔥 Top {len(trends)} Emerging Fashion Trends (Top {top})\n",
+        f"## 🔥 Top {len(trends)} Emerging Fashion Trends\n",
         header,
         separator,
     ]

@@ -39,31 +39,24 @@ def extract_keywords_from_video(video: Dict) -> List[str]:
     """Extrage keywords din tags și titlu (fără AI)."""
     keywords = []
     
-    # Tags
-    tags_json = video.get("tags") or "[]"
-    try:
-        tags = json.loads(tags_json)
-        keywords.extend([normalize_trend_name(tag) for tag in tags if tag])
-    except:
-        pass
-    
     # Keywords din titlu (2+ words phrases)
     title = video.get("title") or ""
     title_lower = title.lower()
     
-    # Fashion keywords comune
+    # Fashion keywords comune (DOAR acestea vor apărea în top)
     fashion_terms = [
-        "vintage fashion",
-        "thrift haul", "sustainable fashion", "fast fashion",
-        "y2k fashion", "grunge", "cottagecore", "dark academia",
-        "clean girl", "mob wife", "quiet luxury", "old money",
-        "nefor", "mermaidcore", "coastal cowgirl", "blokette",
-        "eclectic grandpa", "balletcore", "gorpcore", "athleisure",
-        "normcore", "tomato girl", "retro futurism",
-        "oversized", "blazer", "wide leg", "cargo pants",
-        "leather jacket", "trench coat", "denim", "maxi dress",
-        "apres ski", "boho chic", "mod revival"
-    ]
+        "vintage fashion", "y2k fashion", "grunge", "cottagecore", 
+        "dark academia", "light academia", "clean girl", "soft girl",
+        "mob wife", "quiet luxury", "old money", "preppy",
+        "mermaidcore", "fairycore", "royalcore", "kawaii fashion",
+        "harajuku", "boho chic", "balletcore", "eclectic grandpa",
+        "coastal cowgirl", "blokette", "gorpcore", "athleisure",
+        "normcore", "streetwear", "skater style", "indie sleaze",
+        "tomato girl", "retro futurism", "cyberpunk", "steampunk",
+        "techwear", "weirdcore", "pastel goth", "goth",
+        "apres ski", "mod revival", "maximalist style", "minimalist style",
+        "countryside chic"
+]
     
     for term in fashion_terms:
         if term in title_lower:

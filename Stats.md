@@ -1,15 +1,10 @@
-## 🔥 Top 10 Emerging Fashion Trends (Top 10)
+## 🔥 Top 5 Emerging Fashion Trends
 
 | Trend | Score | Avg Views/Clip |
 | --- | ---: | ---: |
-| **Nefor** | 199.99 | 37,515 |
-| **Cringe** | 24.48 | 54,310 |
-| **Care E Faza** | 24.48 | 54,310 |
-| **Tiktok** | 24.48 | 54,310 |
-| **The Real Red** | 24.48 | 54,310 |
-| **Therealred** | 24.48 | 54,310 |
-| **Rovion** | 24.48 | 54,310 |
-| **Romania** | 24.48 | 54,310 |
-| **Rovision** | 24.48 | 54,310 |
-| **Red** | 24.48 | 54,310 |
+| **Streetwear** | 319.54 | 224,347 |
+| **Quiet Luxury** | 207.29 | 96,010 |
+| **Vintage Fashion** | 113.97 | 544,306 |
+| **Clean Girl** | 57.12 | 91,056 |
+| **Dark Academia** | 50.44 | 199,453 |
 
